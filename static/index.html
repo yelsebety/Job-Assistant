@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Job-Application Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14161b;
+    --bg-vignette: radial-gradient(ellipse at top, #1a1d24 0%, #101216 70%);
+    --surface: #1c1f27;
+    --surface-border: #2b2f3a;
+    --ink: #ece7dd;
+    --ink-dim: #9da0a8;
+    --ink-faint: #6b6e77;
+    --gold: #c9a24b;
+    --gold-strong: #e4c06b;
+    --slate: #8b9cb8;
+    --slate-bg: rgba(139, 156, 184, 0.12);
+    --rust: #c97354;
+    --paper-bg: #f3eee1;
+    --paper-ink: #2a2620;
+    --paper-border: #e4dcc8;
+    --focus-ring: #e4c06b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg-vignette), var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  header {
+    margin-bottom: 3rem;
+  }
+
+  h1 {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 600;
+    font-size: 2.15rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.6rem;
+    color: var(--ink);
+  }
+
+  header p {
+    color: var(--ink-dim);
+    font-size: 0.98rem;
+    margin: 0;
+    max-width: 60ch;
+  }
+
+  header .rule {
+    height: 1px;
+    background: var(--surface-border);
+    margin-top: 1.75rem;
+  }
+
+  .documents {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2.25rem;
+  }
+
+  @media (max-width: 720px) {
+    .documents { grid-template-columns: 1fr; }
+  }
+
+  .doc {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 4px 10px 10px 10px;
+    padding: 1.5rem 1.25rem 1.25rem;
+  }
+
+  .doc-tab {
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-bottom: none;
+    border-radius: 4px 10px 0 0;
+    padding: 0.3rem 0.9rem 0.4rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--ink-dim);
+    transform: translateY(-100%);
+  }
+
+  textarea {
+    width: 100%;
+    background: #16181e;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 0.92rem;
+    padding: 0.9rem;
+    resize: vertical;
+    line-height: 1.55;
+  }
+
+  textarea::placeholder { color: var(--ink-faint); }
+
+  textarea:focus, button:focus-visible, input:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
+  }
+
+  .upload-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+    flex-wrap: wrap;
+  }
+
+  .file-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: transparent;
+    border: 1px solid var(--surface-border);
+    color: var(--ink-dim);
+    font-size: 0.84rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .file-label:hover { border-color: var(--gold); color: var(--ink); }
+  .file-label input { display: none; }
+
+  #uploadStatus {
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+  }
+
+  .analyze-row {
+    text-align: center;
+    margin: 2.5rem 0;
+  }
+
+  #analyzeBtn {
+    background: var(--gold);
+    color: #1a1508;
+    border: none;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: 0.98rem;
+    padding: 0.85rem 2.4rem;
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  #analyzeBtn:hover:not(:disabled) { background: var(--gold-strong); }
+  #analyzeBtn:active:not(:disabled) { transform: scale(0.98); }
+  #analyzeBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(26, 21, 8, 0.3);
+    border-top-color: #1a1508;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #errorBox {
+    background: rgba(201, 115, 84, 0.1);
+    border: 1px solid rgba(201, 115, 84, 0.35);
+    color: #e0a58f;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .hidden { display: none !important; }
+
+  #results {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise 0.5s ease forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #results { animation: none; opacity: 1; transform: none; }
+    .seal circle.progress { transition: none; }
+  }
+
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .results-rule {
+    height: 1px;
+    background: var(--surface-border);
+    margin: 0 0 2.5rem;
+  }
+
+  .seal-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 3rem;
+  }
+
+  .seal {
+    position: relative;
+    width: 132px;
+    height: 132px;
+  }
+
+  .seal svg { transform: rotate(-90deg); }
+
+  .seal circle.track { stroke: var(--surface-border); }
+
+  .seal circle.progress {
+    stroke: var(--gold);
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease, stroke 0.3s ease;
+  }
+
+  .seal-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .seal-score {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 700;
+    font-size: 2.1rem;
+    color: var(--ink);
+  }
+
+  .seal-caption {
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    margin-top: 0.1rem;
+  }
+
+  section.block {
+    margin-bottom: 2.5rem;
+  }
+
+  section.block .block-heading {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: 0.98rem;
+    color: var(--ink);
+    margin: 0 0 0.9rem;
+  }
+
+  .keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .keyword-chip {
+    background: var(--slate-bg);
+    color: var(--slate);
+    font-size: 0.82rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(139, 156, 184, 0.25);
+  }
+
+  .no-keywords {
+    color: var(--ink-faint);
+    font-size: 0.9rem;
+  }
+
+  .bullets {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .bullets li {
+    border-left: 2px solid var(--gold);
+    padding: 0.15rem 0 0.15rem 1rem;
+    margin-bottom: 0.85rem;
+    font-size: 0.92rem;
+    color: var(--ink);
+    line-height: 1.55;
+  }
+
+  .bullets li:last-child { margin-bottom: 0; }
+
+  .letter-page {
+    background: var(--paper-bg);
+    border: 1px solid var(--paper-border);
+    border-radius: 2px;
+    box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.5);
+    padding: 2.75rem 2.5rem;
+    color: var(--paper-ink);
+  }
+
+  .letter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--paper-border);
+  }
+
+  .letter-head h2 {
+    font-family: 'Source Serif 4', serif;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--paper-ink);
+    margin: 0;
+  }
+
+  #copyBtn {
+    background: none;
+    border: none;
+    color: #6b5f3e;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  #copyBtn:hover { color: var(--paper-ink); }
+
+  #coverLetter {
+    font-family: 'Source Serif 4', serif;
+    font-size: 1.02rem;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    max-width: 68ch;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <h1>AI Job-Application Assistant</h1>
+    <p>Paste a job posting and your résumé. Get a match score, the gaps in your language, tailored bullets, and a cover letter draft.</p>
+    <div class="rule"></div>
+  </header>
+
+  <div class="documents">
+    <div class="doc">
+      <span class="doc-tab">Job posting</span>
+      <textarea id="jobDescription" rows="10" placeholder="Paste the job posting here..."></textarea>
+    </div>
+
+    <div class="doc">
+      <span class="doc-tab">Your résumé</span>
+      <textarea id="resumeText" rows="10" placeholder="Paste your résumé, or upload a PDF below..."></textarea>
+      <div class="upload-row">
+        <label class="file-label">
+          Upload PDF
+          <input type="file" id="resumeFile" accept="application/pdf" />
+        </label>
+        <span id="uploadStatus"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="analyze-row">
+    <button id="analyzeBtn">
+      <span id="btnText">Analyze match</span>
+      <span id="btnSpinner" class="spinner hidden"></span>
+    </button>
+  </div>
+
+  <div id="errorBox" class="hidden"></div>
+
+  <div id="results" class="hidden">
+    <div class="results-rule"></div>
+
+    <div class="seal-wrap">
+      <div class="seal">
+        <svg width="132" height="132" viewBox="0 0 132 132">
+          <circle class="track" cx="66" cy="66" r="58" fill="none" stroke-width="6"/>
+          <circle id="progressRing" class="progress" cx="66" cy="66" r="58" fill="none" stroke-width="6"
+            stroke-dasharray="364.4" stroke-dashoffset="364.4"/>
+        </svg>
+        <div class="seal-label">
+          <span id="matchScore" class="seal-score">--</span>
+          <span class="seal-caption">match</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="block">
+      <h2 class="block-heading">Missing keywords</h2>
+      <div id="missingKeywords" class="keywords"></div>
+    </section>
+
+    <section class="block">
+      <h2 class="block-heading">Tailored résumé bullets</h2>
+      <ul id="tailoredBullets" class="bullets"></ul>
+    </section>
+
+    <section class="block">
+      <div class="letter-page">
+        <div class="letter-head">
+          <h2>Cover letter draft</h2>
+          <button id="copyBtn">Copy</button>
+        </div>
+        <p id="coverLetter"></p>
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<script>
+const API_BASE = "";
+
+const jobDescriptionEl = document.getElementById("jobDescription");
+const resumeTextEl = document.getElementById("resumeText");
+const resumeFileEl = document.getElementById("resumeFile");
+const uploadStatusEl = document.getElementById("uploadStatus");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const btnText = document.getElementById("btnText");
+const btnSpinner = document.getElementById("btnSpinner");
+const errorBox = document.getElementById("errorBox");
+const results = document.getElementById("results");
+
+resumeFileEl.addEventListener("change", async () => {
+  const file = resumeFileEl.files[0];
+  if (!file) return;
+
+  uploadStatusEl.textContent = "Extracting text...";
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch(`${API_BASE}/upload-resume`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Upload failed");
+    }
+    const data = await res.json();
+    resumeTextEl.value = data.extracted_text;
+    uploadStatusEl.textContent = "Extracted — feel free to edit.";
+  } catch (e) {
+    uploadStatusEl.textContent = "Error: " + e.message;
+  }
+});
+
+analyzeBtn.addEventListener("click", async () => {
+  const jobDescription = jobDescriptionEl.value.trim();
+  const resumeText = resumeTextEl.value.trim();
+
+  errorBox.classList.add("hidden");
+  results.classList.add("hidden");
+
+  if (!jobDescription || !resumeText) {
+    errorBox.textContent = "Add both a job posting and a résumé before analyzing.";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+
+  analyzeBtn.disabled = true;
+  btnText.textContent = "Analyzing...";
+  btnSpinner.classList.remove("hidden");
+
+  try {
+    const res = await fetch(`${API_BASE}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resume_text: resumeText, job_description: jobDescription }),
+    });
+
+    if (!res.ok) {
+      let message = `Request failed (status ${res.status})`;
+      try {
+        const err = await res.json();
+        message = err.detail || message;
+      } catch {
+        message = `${message}: ${res.statusText}`;
+      }
+      throw new Error(message);
+    }
+
+    const data = await res.json();
+    renderResults(data);
+  } catch (e) {
+    errorBox.textContent = e.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    analyzeBtn.disabled = false;
+    btnText.textContent = "Analyze match";
+    btnSpinner.classList.add("hidden");
+  }
+});
+
+function scoreColor(score) {
+  if (score >= 70) return getComputedStyle(document.documentElement).getPropertyValue('--gold').trim();
+  if (score >= 40) return getComputedStyle(document.documentElement).getPropertyValue('--slate').trim();
+  return getComputedStyle(document.documentElement).getPropertyValue('--rust').trim();
+}
+
+function renderResults(data) {
+  const score = Math.max(0, Math.min(100, data.match_score));
+  document.getElementById("matchScore").textContent = score;
+
+  const circumference = 364.4;
+  const offset = circumference - (score / 100) * circumference;
+  const ring = document.getElementById("progressRing");
+  ring.style.stroke = scoreColor(score);
+  // reset then animate on next frame so the transition always plays
+  ring.style.strokeDashoffset = circumference;
+  requestAnimationFrame(() => {
+    ring.style.strokeDashoffset = offset;
+  });
+
+  const keywordsEl = document.getElementById("missingKeywords");
+  keywordsEl.innerHTML = "";
+  if (data.missing_keywords.length === 0) {
+    keywordsEl.innerHTML = '<span class="no-keywords">None — strong coverage.</span>';
+  } else {
+    data.missing_keywords.forEach(kw => {
+      const span = document.createElement("span");
+      span.className = "keyword-chip";
+      span.textContent = kw;
+      keywordsEl.appendChild(span);
+    });
+  }
+
+  const bulletsEl = document.getElementById("tailoredBullets");
+  bulletsEl.innerHTML = "";
+  data.tailored_bullets.forEach(b => {
+    const li = document.createElement("li");
+    li.textContent = b;
+    bulletsEl.appendChild(li);
+  });
+
+  document.getElementById("coverLetter").textContent = data.cover_letter_draft;
+
+  results.classList.remove("hidden");
+  // restart the reveal animation each time
+  results.style.animation = "none";
+  void results.offsetHeight;
+  results.style.animation = "";
+  results.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.getElementById("copyBtn").addEventListener("click", () => {
+  const text = document.getElementById("coverLetter").textContent;
+  navigator.clipboard.writeText(text);
+  const btn = document.getElementById("copyBtn");
+  const original = btn.textContent;
+  btn.textContent = "Copied";
+  setTimeout(() => (btn.textContent = original), 1500);
+});
+</script>
+
+</body>
+</html>
