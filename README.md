@@ -5,6 +5,8 @@ keywords you're missing, resume bullets rewritten to match the posting's
 language, and a tailored cover letter draft.
 
 ![Match results screenshot](docs/screenshot.png)
+# Website
+   🔗 **[Live demo](https://job-assistant-production-3056.up.railway.app/)**
 
 ## Why
 
