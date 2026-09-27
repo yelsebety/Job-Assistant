@@ -1,59 +1,69 @@
 """
 Thin, provider-agnostic-ish wrapper around the LLM call.
-Everything that talks to Gemini lives here — swap providers by
-editing only this file.
+Everything that talks to Groq lives here — swap providers by editing
+only this file.
 """
 
 import os
 import json
 import time
-from google import genai
-from google.genai import types
-from google.genai import errors as genai_errors
+from groq import Groq
+import groq as groq_errors
 
 _client = None
 
-# Primary model, plus fallbacks to try if it's overloaded (503) or briefly
-# unavailable. Order matters: fastest/cheapest first.
+# Primary model, plus fallbacks to try if one is rate-limited, overloaded,
+# or briefly unavailable. Order matters: best quality first, then faster/
+# smaller models from different model families (so one family's outage or
+# rate limit doesn't take down every fallback at once).
 #
-# Google retires Gemini models on a rolling schedule (check
-# https://ai.google.dev/gemini-api/docs/deprecations before assuming these
-# are still current) — gemini-2.5-flash was deliberately left out of this
-# list since it's slated for shutdown October 2026.
-MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+# Groq retires/renames models on its own schedule — check
+# https://console.groq.com/docs/models before assuming these are current.
+MODEL_CANDIDATES = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+
 
 MAX_RETRIES_PER_MODEL = 3
 BASE_BACKOFF_SECONDS = 2
 
+# Errors worth retrying / falling back to the next model on: rate limits,
+# server-side errors, and connection hiccups. None of these mean the
+# request itself was wrong.
+RETRYABLE_ERRORS = (
+    groq_errors.RateLimitError,       # 429 — quota/rate limit hit
+    groq_errors.InternalServerError,  # 5xx — provider-side failure
+    groq_errors.APIConnectionError,   # network-level failure
+    groq_errors.APITimeoutError,      # request timed out
+)
 
-def _get_client() -> genai.Client:
+
+def _get_client() -> Groq:
     global _client
     if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "GEMINI_API_KEY is not set. Add it to your .env file."
+                "GROQ_API_KEY is not set. Add it to your .env file."
             )
-        _client = genai.Client(api_key=api_key)
+        _client = Groq(api_key=api_key, max_retries=0)  # we handle retries ourselves
     return _client
 
 
-def _call_model(client: genai.Client, model: str, prompt: str):
-    return client.models.generate_content(
+def _call_model(client: Groq, model: str, prompt: str):
+    return client.chat.completions.create(
         model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.4,
-        ),
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+        temperature=0.4,
     )
 
 
 def generate_json(prompt: str) -> dict:
     """Sends a prompt, expects a JSON object back, parses and returns it.
 
-    Retries with exponential backoff on 503 (overloaded) errors, and falls
-    through to backup models if a given model keeps failing.
+    Retries with exponential backoff on rate-limit/server errors, and falls
+    through to backup models if a given model keeps failing. This matters
+    in particular for 429s: a per-model daily/rate quota being exhausted
+    should not kill the whole request if another model still has room.
     """
     client = _get_client()
     last_error: Exception | None = None
@@ -67,30 +77,27 @@ def generate_json(prompt: str) -> dict:
                 response = _call_model(client, model, prompt)
                 model_succeeded = True
                 break  # success — stop retrying this model
-            except genai_errors.ServerError as e:
-                # 503 UNAVAILABLE / high demand — worth retrying, and worth
-                # trying the next model if this one is consistently down.
+            except RETRYABLE_ERRORS as e:
                 last_error = e
                 if attempt < MAX_RETRIES_PER_MODEL:
                     time.sleep(BASE_BACKOFF_SECONDS * attempt)
                 # else: fall through to the next model below
-            except genai_errors.ClientError as e:
-                # 4xx errors (bad key, invalid model name, bad request) won't
-                # be fixed by retrying or switching models — fail fast.
-                raise RuntimeError(f"Gemini API call failed: {e}") from e
+            except groq_errors.APIStatusError as e:
+                # Non-retryable 4xx (bad key, bad request, etc.) — fail fast.
+                raise RuntimeError(f"Groq API call failed: {e}") from e
             except Exception as e:
-                raise RuntimeError(f"Gemini API call failed: {e}") from e
+                raise RuntimeError(f"Groq API call failed: {e}") from e
 
         if model_succeeded:
             break  # stop trying other models
 
     if response is None:
         raise RuntimeError(
-            "All Gemini models are currently overloaded or unavailable. "
+            "All Groq models are currently rate-limited or unavailable. "
             f"Last error: {last_error}. Please try again in a minute."
         )
 
-    raw_text = (response.text or "").strip()
+    raw_text = (response.choices[0].message.content or "").strip()
 
     try:
         return json.loads(raw_text)
@@ -98,4 +105,3 @@ def generate_json(prompt: str) -> dict:
         raise RuntimeError(
             f"Model did not return valid JSON. Raw output: {raw_text[:500]}"
         ) from e
-
